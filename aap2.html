@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en" id="htmlRoot">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AccessMap+</title>
+<meta name="theme-color" content="#1C5D99" />
+<meta name="description" content="Live location, accessible routing, community barrier reports, and optional Firestore real-time sync." />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+  :root {
+    --ink: #172033; --ink-soft: #536179;
+    --wayfind: #126C83; --wayfind-light: #DCF3F0;
+    --amber: #C67A19; --amber-light: #FFF0D8;
+    --high: #2C8659; --high-light: #DFF3E7;
+    --low: #B84A44; --low-light: #F9E2DF;
+    --violet: #5C64B8; --violet-light: #E9EBFF;
+    --sun: #F5C84B; --mint: #4FB28A;
+    --mist: #F3F7F7; --paper: #FFFFFF; --line: #D7E2E6;
+    --shadow: 0 18px 50px rgba(23,32,51,.14);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      linear-gradient(90deg, rgba(18,108,131,.06) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(198,122,25,.05) 1px, transparent 1px),
+      linear-gradient(180deg, #F9FCFC 0%, #EEF6F5 52%, #FBF7EF 100%);
+    background-size: 42px 42px, 42px 42px, auto;
+    overflow: hidden;
+  }
+  body.large-text { font-size: 112%; }
+  body.large-text .btn, body.large-text input, body.large-text .chip { font-size: 1rem !important; }
+  body.high-contrast {
+    --ink: #05070B; --ink-soft: #1F2937; --wayfind: #005B74; --wayfind-light: #D5F7FF;
+    --amber: #965A00; --amber-light: #FFE9BE; --mist: #FFFFFF; --paper: #FFFFFF; --line: #0F172A;
+  }
+  body.calm-mode * { transition: none !important; scroll-behavior: auto !important; }
+  .am-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
+  button { font-family: inherit; }
+  #app { position: relative; width: 100%; height: 100vh; height: 100dvh; }
+
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; background: transparent; }
+  .screen.active { display: flex; }
+
+  .btn { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; border: none; border-radius: 999px; cursor: pointer; transition: transform .12s ease, filter .12s ease, background .12s ease, box-shadow .12s ease; min-height: 44px; }
+  .btn:active { transform: scale(.97); }
+  .btn:focus-visible { outline: 3px solid var(--wayfind); outline-offset: 2px; }
+  .btn-primary { background: var(--wayfind); color: #fff; box-shadow: 0 8px 22px rgba(18,108,131,.22); }
+  .btn-primary:hover { filter: brightness(1.15); }
+  .btn-ghost { background: var(--paper); color: var(--ink-soft); border: 1.5px solid var(--line); }
+  .btn-ghost:hover { background: var(--mist); }
+  .btn-danger { background: var(--low); color: #fff; }
+  .btn-danger:hover { filter: brightness(1.08); }
+  .btn-accent { background: var(--amber); color: #fff; }
+
+  .icon-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--paper); color: var(--ink); display: flex; align-items: center; justify-content: center; font-size: 17px; cursor: pointer; }
+  .icon-btn.glass { background: rgba(255,255,255,.92); box-shadow: 0 2px 10px rgba(16,27,45,.14); backdrop-filter: blur(4px); }
+
+  .chip { border: 2px solid var(--line); background: var(--paper); border-radius: 16px; cursor: pointer; text-align: left; transition: border-color .15s ease, background .15s ease; font-family: inherit; }
+  .chip[data-on="true"] { border-color: var(--wayfind); background: var(--wayfind-light); }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .step-rail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
+  .step-rail span { min-height: 34px; border-radius: 999px; background: rgba(255,255,255,.72); border: 1.5px solid var(--line); color: var(--ink-soft); display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; font-weight: 800; padding: 0 8px; }
+  .step-rail span[data-on="true"] { background: var(--wayfind); color: #fff; border-color: var(--wayfind); }
+
+  /* ---------- splash ---------- */
+  #screen-splash { align-items: center; justify-content: center; padding: 24px; }
+  .lang-dropdown-wrap { position: absolute; top: 18px; right: 18px; }
+  #langSelectSplash, #langSelectSettings { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 600; font-size: 13px; padding: 9px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); }
+  .splash-center { text-align: center; max-width: 440px; width: 100%; }
+  .logo-mark { margin: 0 auto 18px; }
+  .splash-center h1 { font-size: clamp(34px, 7vw, 54px); font-weight: 700; margin: 0 0 10px; letter-spacing: 0; }
+  .splash-center p.tagline { color: var(--ink-soft); font-size: 15px; line-height: 1.55; margin: 0 0 28px; }
+  .splash-actions { display: flex; flex-direction: column; gap: 10px; }
+  .splash-actions .btn { padding: 14px 18px; font-size: 15px; }
+  .welcome-panel { background: rgba(255,255,255,.82); border: 1.5px solid rgba(215,226,230,.9); border-radius: 18px; box-shadow: var(--shadow); padding: 18px; margin-top: 22px; text-align: left; }
+  .welcome-panel h2 { font-size: 15px; margin: 0 0 12px; }
+  .journey-steps { display: grid; gap: 8px; }
+  .journey-step { display: flex; gap: 10px; align-items: flex-start; background: var(--mist); border-radius: 14px; padding: 11px 12px; font-size: 13px; color: var(--ink-soft); }
+  .journey-step b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 2px; }
+  .journey-step .num { width: 26px; height: 26px; border-radius: 50%; background: var(--wayfind); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; flex-shrink: 0; }
+  .access-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
+  .access-shortcuts button { border: 1.5px solid var(--line); background: var(--paper); border-radius: 14px; min-height: 48px; font-weight: 800; color: var(--ink); cursor: pointer; }
+
+  /* ---------- destination screen ---------- */
+  #screen-destination .dest-topbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px; }
+  #screen-destination .brand-sm { font-weight: 700; font-size: 15px; color: var(--wayfind); margin-left: 2px; }
+  .dest-body { flex: 1; padding: 6px 20px 20px; overflow-y: auto; }
+  .dest-title { margin: 8px 0 16px; }
+  .dest-title h2 { font-size: clamp(28px, 8vw, 44px); line-height: 1.02; margin: 0 0 8px; }
+  .dest-title p { color: var(--ink-soft); font-size: 14px; line-height: 1.45; margin: 0; }
+  .loc-row { display: flex; align-items: center; gap: 12px; background: var(--paper); border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 15px; margin-bottom: 10px; box-shadow: 0 8px 26px rgba(23,32,51,.06); }
+  .loc-row .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot-blue { background: var(--wayfind); }
+  .dot-amber { background: var(--amber); }
+  .loc-row input { border: none; outline: none; font-size: 14.5px; font-family: inherit; width: 100%; background: transparent; color: var(--ink); }
+  .loc-row #fromLabel { font-size: 14.5px; color: var(--ink-soft); }
+  .field-label { display: block; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 800; font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .04em; margin: 14px 2px 8px; }
+  .search-results { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .search-results button { text-align: left; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); font-size: 13.5px; cursor: pointer; }
+  .search-results button b { display: block; font-size: 14px; }
+  .search-results button span { color: var(--ink-soft); font-size: 12px; }
+  .search-status { font-size: 13px; color: var(--ink-soft); padding: 4px 2px 14px; }
+  .quick-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .quick-chips button { padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--paper); font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .quick-chips button:hover { border-color: var(--wayfind); }
+  .destination-cards { display: grid; gap: 8px; margin-top: 14px; }
+  .destination-cards button { text-align: left; border: 1.5px solid var(--line); background: rgba(255,255,255,.9); border-radius: 16px; padding: 13px 14px; cursor: pointer; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 24px rgba(23,32,51,.05); }
+  .destination-cards .dest-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .destination-cards b { display: block; font-size: 14px; }
+  .destination-cards span:last-child { display: block; font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+
+  /* ---------- map screen ---------- */
+  #screen-map { padding: 0; }
+  #leafletMap { position: absolute; inset: 0; z-index: 0; }
+  .map-topbar { position: absolute; top: 14px; left: 14px; right: 14px; z-index: 500; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .stat-pill { display: flex; align-items: center; gap: 5px; padding: 8px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 700; border: none; cursor: pointer; font-family: 'Space Grotesk', system-ui, sans-serif; }
+  .stat-pill.glass { background: rgba(255,255,255,.92); box-shadow: 0 2px 10px rgba(16,27,45,.14); color: var(--ink); backdrop-filter: blur(4px); }
+  #recenterBtn { position: absolute; z-index: 500; right: 14px; font-size: 20px; }
+  .banner { position: absolute; left: 14px; right: 14px; z-index: 500; background: var(--amber-light); color: #7A4A0E; padding: 10px 14px; border-radius: 14px; font-size: 13px; font-weight: 700; box-shadow: 0 2px 10px rgba(16,27,45,.1); display: flex; align-items: flex-start; gap: 8px; }
+  .banner button { background: none; border: none; margin-left: auto; cursor: pointer; font-size: 15px; color: #7A4A0E; }
+
+  .map-coach { position: absolute; left: 14px; right: 14px; top: 116px; z-index: 500; background: rgba(255,255,255,.95); border: 1.5px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 14px; max-width: 430px; }
+  .map-coach .coach-eyebrow { font-size: 11px; font-weight: 800; color: var(--wayfind); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .map-coach .coach-main { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+  .map-coach .coach-sub { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; }
+  .bottom-sheet { position: absolute; z-index: 500; left: 0; right: 0; bottom: 0; background: var(--paper); border-radius: 22px 22px 0 0; box-shadow: 0 -8px 28px rgba(16,27,45,.16); padding: 10px 18px 18px; max-height: 55vh; overflow-y: auto; }
+  .sheet-handle { width: 40px; height: 4px; background: var(--line); border-radius: 4px; margin: 0 auto 12px; }
+  .route-summary { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .route-summary .stat-num { font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 22px; font-weight: 700; }
+  .route-summary .stat-unit { font-size: 11px; color: var(--ink-soft); font-weight: 700; }
+  .route-summary .dest-name { flex: 1; font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .face-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 10px; }
+  .face-chip { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; border: none; }
+  .guidance-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .guidance-actions .btn { padding: 11px 10px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .route-steps { display: grid; gap: 8px; margin: 8px 0 12px; }
+  .route-step-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 11px; border-radius: 14px; background: var(--mist); font-size: 12.8px; color: var(--ink-soft); }
+  .route-step-row b { color: var(--ink); display: block; font-size: 13px; margin-bottom: 2px; }
+  .route-step-row .step-dot { width: 24px; height: 24px; border-radius: 50%; background: var(--wayfind-light); color: var(--wayfind); display: flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+  .sheet-actions { display: flex; gap: 10px; }
+  .sheet-actions .btn { flex: 1; padding: 13px 0; font-size: 13.5px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+  /* ---------- modals ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(16,27,45,.45); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
+  .overlay.open { display: flex; }
+  .modal { background: var(--paper); border-radius: 22px; padding: 24px; width: 460px; max-width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(16,27,45,.3); }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .modal-head h3 { font-size: 18px; font-weight: 700; margin: 0; }
+  .modal-close { background: var(--mist); border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 14px; }
+  .modal p.desc { font-size: 13px; color: var(--ink-soft); margin: 6px 0 16px; }
+  .profile-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
+  .profile-grid .chip { padding: 13px 14px; }
+  .profile-grid .chip b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .profile-grid .chip span.copy { display: block; color: var(--ink-soft); font-size: 12px; line-height: 1.35; }
+  .pref-grid, .barrier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .pref-grid .chip, .barrier-grid .chip { padding: 12px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 700; }
+  .switch { width: 42px; height: 24px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; border: none; flex-shrink: 0; }
+  .switch[data-on="true"] { background: var(--wayfind); }
+  .switch::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition: left .15s ease; }
+  .switch[data-on="true"]::after { left: 21px; }
+  .tab-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab-row button { flex: 1; padding: 9px 0; border-radius: 999px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--mist); color: var(--ink-soft); font-family: inherit; }
+  .tab-row button[data-on="true"] { background: var(--wayfind); color: #fff; }
+  .outlet-row { display: flex; align-items: center; gap: 12px; background: var(--mist); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .outlet-row .em { font-size: 22px; }
+  .outlet-row .info { flex: 1; }
+  .outlet-row .info b { display: block; font-size: 13.5px; }
+  .outlet-row .info span { font-size: 12px; color: var(--ink-soft); }
+  .coupon-row { border: 2px dashed var(--line); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .coupon-code { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .05em; margin-top: 4px; }
+  .roadmap-row { display: flex; gap: 12px; margin-bottom: 14px; align-items: flex-start; }
+
+  .leaflet-popup-content { font-family: 'Atkinson Hyperlegible', system-ui, sans-serif; }
+  .lp-title { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .lp-note { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 8px; }
+  .lp-photo { font-size: 12px; color: var(--ink-soft); display: flex; align-items: center; gap: 5px; margin-bottom: 8px; }
+  .lp-photo-img { width: 100%; max-height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); margin-bottom: 8px; }
+  .lp-conf { border-radius: 10px; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
+  .lp-actions { display: flex; gap: 6px; }
+  .lp-actions button { flex: 1; border: none; border-radius: 999px; padding: 7px 0; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 3000; background: var(--ink); color: #fff; padding: 11px 20px; border-radius: 999px; font-size: 13.5px; font-weight: 700; box-shadow: 0 8px 24px rgba(16,27,45,.3); max-width: 92vw; text-align: center; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  .reward-modal { text-align: center; }
+  .reward-icon { width: 72px; height: 72px; border-radius: 50%; background: var(--amber-light); color: #7A4A0E; display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 16px; }
+  .reward-amount { background: var(--amber-light); color: #7A4A0E; border-radius: 14px; padding: 14px 0; font-size: 22px; font-weight: 700; margin-bottom: 18px; font-family: 'Space Grotesk', system-ui, sans-serif; }
+
+  @media (min-width: 860px) {
+    #screen-destination .dest-body { max-width: 480px; margin: 0 auto; width: 100%; }
+    .map-coach { right: auto; width: 410px; top: 72px; }
+    .bottom-sheet { left: auto; right: 0; top: 0; bottom: 0; width: 400px; border-radius: 0; max-height: none; box-shadow: -8px 0 28px rgba(16,27,45,.12); display: flex; flex-direction: column; }
+    .sheet-handle { display: none; }
+    .face-strip { flex-direction: column; overflow-x: visible; }
+    #recenterBtn { right: 418px; }
+    #reportPlacementBanner { right: 418px; }
+  }
+
+  @media (max-width: 540px) {
+    .step-rail { grid-template-columns: 1fr; }
+    .access-shortcuts { grid-template-columns: 1fr; }
+    .map-coach { top: 108px; }
+    .pref-grid, .barrier-grid { grid-template-columns: 1fr; }
+    .guidance-actions { grid-template-columns: 1fr; }
+    .bottom-sheet { max-height: 58vh; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ SPLASH ============ -->
+  <section id="screen-splash" class="screen active">
+    <div class="lang-dropdown-wrap">
+      <select id="langSelectSplash"></select>
+    </div>
+    <div class="splash-center">
+      <svg class="logo-mark" width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M36 4C21 4 10 15.5 10 29.5C10 47 36 68 36 68C36 68 62 47 62 29.5C62 15.5 51 4 36 4Z" fill="#1C5D99"/>
+        <circle cx="36" cy="29" r="11" fill="#FFFFFF"/>
+        <path d="M20 16C17 12 17 8 19 5" stroke="#C97A1A" stroke-width="3" stroke-linecap="round"/>
+        <path d="M14 20C9 15 9 8 12 3" stroke="#C97A1A" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <h1 class="am-display">AccessMap+</h1>
+      <p class="tagline" data-i18n="tagline"></p>
+      <div class="splash-actions">
+        <button id="btnStart" class="btn btn-primary" data-i18n="start"></button>
+        <button id="btnSetPrefs" class="btn btn-ghost" data-i18n="setPrefs"></button>
+      </div>
+      <div class="step-rail" aria-label="Trip steps">
+        <span data-on="true">1 Destination</span>
+        <span>2 Accessible route</span>
+        <span>3 Live guide</span>
+      </div>
+      <div class="welcome-panel">
+        <h2 class="am-display">A calmer way to move through the city</h2>
+        <div class="journey-steps">
+          <div class="journey-step"><span class="num">1</span><span><b>Choose where to go</b>Use search or nearby essentials like hospitals and pharmacies.</span></div>
+          <div class="journey-step"><span class="num">2</span><span><b>Set what matters</b>Pick step-free, quieter, well-lit, or clearer paths.</span></div>
+          <div class="journey-step"><span class="num">3</span><span><b>Follow live support</b>The map watches your location and warns you about reported barriers.</span></div>
+        </div>
+        <div class="access-shortcuts" aria-label="Quick accessibility setup">
+          <button data-profile-shortcut="mobility">🦽 Mobility</button>
+          <button data-profile-shortcut="vision">👁 Low vision</button>
+          <button data-profile-shortcut="hearing">🦻 Hearing</button>
+          <button data-profile-shortcut="sensory">🧠 Calm route</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DESTINATION ============ -->
+  <section id="screen-destination" class="screen">
+    <div class="dest-topbar">
+      <button id="backToSplash" class="icon-btn">←</button>
+      <div class="am-display brand-sm">AccessMap+</div>
+      <div style="margin-left:auto;"></div>
+      <button id="openPrefsFromDest" class="icon-btn">⚙️</button>
+    </div>
+    <div class="dest-body">
+      <div class="step-rail" aria-label="Trip steps">
+        <span data-on="true">1 Destination</span>
+        <span>2 Route</span>
+        <span>3 Go</span>
+      </div>
+      <div class="dest-title">
+        <h2 class="am-display">Where do you want to go?</h2>
+        <p>We’ll start from your live location and shape the route around your access preferences.</p>
+      </div>
+      <label class="field-label" for="fromLabel">Starting point</label>
+      <div class="loc-row">
+        <span class="dot dot-blue"></span>
+        <span id="fromLabel" data-i18n="locating"></span>
+      </div>
+      <label class="field-label" for="destInput">Destination</label>
+      <div class="loc-row">
+        <span class="dot dot-amber"></span>
+        <input id="destInput" data-i18n-placeholder="searchPlaceholder" autocomplete="off" />
+      </div>
+      <div id="searchStatus" class="search-status" style="display:none;"></div>
+      <div id="searchResults" class="search-results"></div>
+      <div class="quick-chips">
+        <button data-quick="hospital">🏥 <span data-i18n="nearestHospital"></span></button>
+        <button data-quick="pharmacy">💊 <span data-i18n="nearestPharmacy"></span></button>
+      </div>
+      <label class="field-label">Try a guided demo route</label>
+      <div class="destination-cards">
+        <button data-demo-dest="health"><span class="dest-icon" style="background:var(--wayfind-light);">🏥</span><span><b>Community Health Centre</b><span>Ramp entrance, pharmacy nearby</span></span></button>
+        <button data-demo-dest="metro"><span class="dest-icon" style="background:var(--violet-light);">🚇</span><span><b>Metro station with lift</b><span>Step-free entry and lower-crowd walkway</span></span></button>
+        <button data-demo-dest="restroom"><span class="dest-icon" style="background:var(--amber-light);">♿</span><span><b>Accessible public restroom</b><span>Marked route with lighting alerts</span></span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MAP / LIVE NAV ============ -->
+  <section id="screen-map" class="screen">
+    <div id="leafletMap"></div>
+    <div class="map-topbar">
+      <button id="backFromMap" class="icon-btn glass">←</button>
+      <div class="stat-pill glass">🏅 <span id="civicPointsEl">6</span> pts</div>
+      <button id="openRewards" class="stat-pill glass">🍽️ <span id="foodPointsEl">0</span> pts</button>
+      <div id="syncStatus" class="stat-pill glass">↔ Demo sync</div>
+      <button id="openSettingsFromMap" class="icon-btn glass" style="margin-left:auto;">⚙️</button>
+    </div>
+    <div id="prefBanner" class="banner" style="top:66px; display:none;"></div>
+    <div id="reportPlacementBanner" class="banner" style="top:110px; display:none;">
+      <span>📍 Tap the map to mark the barrier, then add the photo and type.</span>
+      <button id="cancelPlacement" aria-label="Cancel marker placement">✕</button>
+    </div>
+    <div id="mapCoach" class="map-coach" role="status" aria-live="polite">
+      <div class="coach-eyebrow">Live guide</div>
+      <div class="coach-main">Choose a destination to begin.</div>
+      <div class="coach-sub">Your route guidance will appear here.</div>
+    </div>
+    <button id="recenterBtn" class="icon-btn glass" style="bottom: calc(46vh + 16px);">🧭</button>
+
+    <div class="bottom-sheet">
+      <div class="sheet-handle"></div>
+      <div class="route-summary">
+        <div><div class="stat-num" id="routeDuration">--</div><div class="stat-unit" data-i18n="min"></div></div>
+        <div class="dest-name" id="destNameEl">—</div>
+        <div><div class="stat-num" id="routeDistance">--</div><div class="stat-unit" data-i18n="km"></div></div>
+      </div>
+      <div class="guidance-actions">
+        <button id="btnGuidance" class="btn btn-primary">▶ Start guidance</button>
+        <button id="btnReadRoute" class="btn btn-ghost">🔊 Read route</button>
+      </div>
+      <div id="routeSteps" class="route-steps" aria-live="polite"></div>
+      <div id="faceLabel" style="font-weight:700; font-size:13px; margin-bottom:8px;" data-i18n="whatYouFace"></div>
+      <div id="faceStrip" class="face-strip"></div>
+      <div class="sheet-actions">
+        <button id="btnSOS" class="btn btn-danger">🆘 <span data-i18n="sos"></span></button>
+        <button id="btnReport" class="btn btn-primary"><span id="reportBtnIcon">🚧</span> <span id="reportBtnText">Mark barrier</span></button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ MODALS ============ -->
+
+<div class="overlay" id="modal-prefs">
+  <div class="modal">
+    <div class="modal-head"><h3 data-i18n="setPrefs"></h3><button class="modal-close" data-close="modal-prefs">✕</button></div>
+    <p class="desc" id="prefsDesc">Choose a quick setup or fine-tune the route alerts yourself.</p>
+    <label class="field-label">Quick setup</label>
+    <div class="profile-grid" id="profileGrid"></div>
+    <div class="toggle-row">
+      <span>Read routes and alerts aloud</span>
+      <button class="switch" id="switchTTS" data-on="false"></button>
+    </div>
+    <div class="toggle-row">
+      <span>Large text and controls</span>
+      <button class="switch" id="switchLargeText" data-on="false"></button>
+    </div>
+    <div class="toggle-row">
+      <span>High contrast</span>
+      <button class="switch" id="switchHighContrast" data-on="false"></button>
+    </div>
+    <div class="toggle-row" style="border-bottom:none; margin-bottom:14px;">
+      <span>Calm mode (less motion)</span>
+      <button class="switch" id="switchCalm" data-on="false"></button>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <span style="font-weight:700; font-size:14px;">Language</span>
+      <select id="langSelectSettings"></select>
+    </div>
+    <div class="pref-grid" id="prefGrid"></div>
+    <button class="btn btn-primary" data-close="modal-prefs" style="width:100%; padding:13px 0;">Save</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-report">
+  <div class="modal">
+    <div class="modal-head"><h3>🚧 <span data-i18n="reportBarrier"></span></h3><button class="modal-close" data-close="modal-report">✕</button></div>
+    <p class="desc">The map marker is saved with your report. Add a type and photo evidence to help others trust it faster.</p>
+    <div id="draftLocationHint" style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); background:var(--mist); border-radius:12px; padding:10px 12px; margin-bottom:14px;">📍 Tap the map to mark the barrier location.</div>
+    <div class="tab-row">
+      <button id="tabManual" data-on="true">✍️ Select type</button>
+      <button id="tabVoice" data-on="false">🎙️ Speak it</button>
+    </div>
+    <div id="barrierManual" class="barrier-grid"></div>
+    <div id="barrierVoice" style="display:none; text-align:center; background:var(--mist); border-radius:14px; padding:18px; margin-bottom:16px;">
+      <button id="micBtn" class="btn btn-primary" style="width:64px; height:64px; border-radius:50%; font-size:24px;">🎙️</button>
+      <p id="micStatus" style="font-size:12.5px; color:var(--ink-soft); margin-top:10px;">Tap and describe the barrier out loud.</p>
+      <div id="micResult" style="display:none; text-align:left; margin-top:10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--ink-soft);">WE HEARD:</div>
+        <div id="micTranscript" style="background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13px; margin:6px 0;"></div>
+        <div style="font-size:12px; color:var(--ink-soft);">Matched to: <b id="micMatchedType" style="color:var(--ink);"></b></div>
+      </div>
+    </div>
+    <button id="photoToggle" class="btn btn-ghost" style="width:100%; padding:10px 0; margin-bottom:14px; display:flex; align-items:center; justify-content:center; gap:8px;" data-on="false">📷 Add photo</button>
+    <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none;" />
+    <div id="photoPreview" style="display:none; margin:-4px 0 14px;"></div>
+    <button id="submitReport" class="btn btn-primary" style="width:100%; padding:13px 0;" disabled>Submit report</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-sos">
+  <div class="modal">
+    <div class="modal-head"><h3>🆘 <span data-i18n="sos"></span></h3><button class="modal-close" data-close="modal-sos">✕</button></div>
+    <p class="desc">You're not alone on this route. Choose what helps right now.</p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="btn btn-danger" style="padding:13px 16px; display:flex; align-items:center; gap:10px; justify-content:flex-start; font-size:14px;">📞 Call Priya (emergency contact)</button>
+      <button id="shareLocationBtn" class="btn" style="background:var(--wayfind-light); color:var(--wayfind); padding:13px 16px; display:flex; align-items:center; gap:10px; justify-content:flex-start; font-size:14px;">📍 Share my live location</button>
+      <div style="padding:13px 16px; background:var(--mist); border-radius:999px; font-size:13.5px;">🏥 Nearest accessible facility shown on map when available</div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-rewards">
+  <div class="modal">
+    <div class="modal-head"><h3>🎁 Food Points</h3><button class="modal-close" data-close="modal-rewards">✕</button></div>
+    <div class="reward-amount" id="rewardsBalance">0 points available</div>
+    <p class="desc">Earned when the community confirms a barrier you reported — 100 points per verified report. Spend them at local outlets below.</p>
+    <div class="tab-row">
+      <button id="tabRedeem" data-on="true">Redeem</button>
+      <button id="tabCoupons" data-on="false">My coupons</button>
+    </div>
+    <div id="outletsList"></div>
+    <div id="couponsList" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-reward-earned">
+  <div class="modal reward-modal">
+    <div class="reward-icon">🎉</div>
+    <h3 style="margin:0 0 8px;">Verified by the community!</h3>
+    <p class="desc">Other users confirmed the barrier you reported. That's real help for people navigating this route today.</p>
+    <div class="reward-amount">+100 Food Points</div>
+    <button class="btn btn-primary" data-close="modal-reward-earned" id="viewRewardsBtn" style="width:100%; padding:12px 0; margin-bottom:10px;">View my rewards</button>
+    <button class="btn btn-ghost" data-close="modal-reward-earned" style="width:100%; padding:12px 0;">Keep going</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-roadmap">
+  <div class="modal">
+    <div class="modal-head"><h3>🚀 What's coming next</h3><button class="modal-close" data-close="modal-roadmap">✕</button></div>
+    <div id="roadmapList" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+/* =========================================================================
+   CONTENT
+   ========================================================================= */
+const LANGS = [
+  { code: "en", native: "English" },
+  { code: "hi", native: "हिन्दी" },
+  { code: "ta", native: "தமிழ்" },
+  { code: "bn", native: "বাংলা" },
+  { code: "te", native: "తెలుగు" },
+  { code: "mr", native: "मराठी" },
+];
+const VOICE_LANG = { en: "en-IN", hi: "hi-IN", ta: "ta-IN", bn: "bn-IN", te: "te-IN", mr: "mr-IN" };
+
+const STRINGS = {
+  en: { tagline: "Where you go, and what you'll face along the way.", setPrefs: "Set accessibility preferences", start: "Plan my accessible trip", searchPlaceholder: "Search a place or address", nearestHospital: "Nearest hospital", nearestPharmacy: "Nearest pharmacy", locating: "Finding your location…", reportBarrier: "Report barrier", sos: "I'm stuck", confirm: "Confirm", goneNow: "Gone now", whatYouFace: "What you'll face on this route", min: "min", km: "km" },
+  hi: { tagline: "आप कहाँ जा रहे हैं, और रास्ते में क्या मिलेगा।", setPrefs: "सुगम्यता प्राथमिकताएँ सेट करें", start: "शुरू करें", searchPlaceholder: "जगह या पता खोजें", nearestHospital: "नज़दीकी अस्पताल", nearestPharmacy: "नज़दीकी दवा की दुकान", locating: "आपकी जगह ढूँढ़ रहे हैं…", reportBarrier: "बाधा दर्ज करें", sos: "मैं फंस गया हूँ", confirm: "पुष्टि करें", goneNow: "अब नहीं है", whatYouFace: "इस रास्ते में क्या मिलेगा", min: "मिनट", km: "किमी" },
+  ta: { tagline: "நீங்கள் செல்லும் இடம், வழியில் என்ன எதிர்கொள்வீர்கள்.", setPrefs: "அணுகல் விருப்பங்களை அமைக்கவும்", start: "தொடங்குங்கள்", searchPlaceholder: "இடம் அல்லது முகவரியைத் தேடுங்கள்", nearestHospital: "அருகிலுள்ள மருத்துவமனை", nearestPharmacy: "அருகிலுள்ள மருந்தகம்", locating: "உங்கள் இடத்தைக் கண்டறிகிறோம்…", reportBarrier: "தடையைப் புகாரளிக்கவும்", sos: "நான் சிக்கிக்கொண்டேன்", confirm: "உறுதிப்படுத்து", goneNow: "இப்போது இல்லை", whatYouFace: "இந்த வழியில் என்ன இருக்கும்", min: "நிமிடம்", km: "கிமீ" },
+  bn: { tagline: "আপনি কোথায় যাচ্ছেন, এবং পথে কী পাবেন।", setPrefs: "অ্যাক্সেসিবিলিটি পছন্দ সেট করুন", start: "শুরু করুন", searchPlaceholder: "জায়গা বা ঠিকানা খুঁজুন", nearestHospital: "নিকটতম হাসপাতাল", nearestPharmacy: "নিকটতম ফার্মেসি", locating: "আপনার অবস্থান খোঁজা হচ্ছে…", reportBarrier: "বাধা রিপোর্ট করুন", sos: "আমি আটকে গেছি", confirm: "নিশ্চিত করুন", goneNow: "এখন নেই", whatYouFace: "এই পথে কী পাবেন", min: "মিনিট", km: "কিমি" },
+  te: { tagline: "మీరు ఎక్కడికి వెళ్తున్నారు, దారిలో ఏమి ఎదురవుతుంది.", setPrefs: "అందుబాటు ప్రాధాన్యతలను సెట్ చేయండి", start: "ప్రారంభించండి", searchPlaceholder: "స్థలం లేదా చిరునామాను వెతకండి", nearestHospital: "సమీప ఆసుపత్రి", nearestPharmacy: "సమీప మందుల దుకాణం", locating: "మీ స్థానాన్ని కనుగొంటున్నాము…", reportBarrier: "అడ్డంకిని నివేదించండి", sos: "నేను చిక్కుకున్నాను", confirm: "నిర్ధారించండి", goneNow: "ఇప్పుడు లేదు", whatYouFace: "ఈ మార్గంలో ఏమి ఎదురవుతుంది", min: "నిమి", km: "కిమీ" },
+  mr: { tagline: "तुम्ही कुठे जात आहात, आणि वाटेत काय भेटेल.", setPrefs: "सुलभता प्राधान्ये सेट करा", start: "सुरू करा", searchPlaceholder: "ठिकाण किंवा पत्ता शोधा", nearestHospital: "जवळचे रुग्णालय", nearestPharmacy: "जवळचे औषध दुकान", locating: "तुमचे स्थान शोधत आहोत…", reportBarrier: "अडथळा नोंदवा", sos: "मी अडकलो आहे", confirm: "पुष्टी करा", goneNow: "आता नाही", whatYouFace: "या मार्गावर काय भेटेल", min: "मिनिट", km: "किमी" },
+};
+
+const PREFERENCES = [
+  { id: "stepFree", emoji: "🦽", label: "Step-free access" },
+  { id: "lowerNoise", emoji: "🔊", label: "Lower noise" },
+  { id: "avoidCrowds", emoji: "👥", label: "Avoid crowds" },
+  { id: "avoidFlashing", emoji: "⚡", label: "Avoid flashing lights" },
+  { id: "betterLighting", emoji: "💡", label: "Better lighting" },
+  { id: "clearPathways", emoji: "👁️", label: "Clear pathways" },
+];
+
+const ACCESS_PROFILES = [
+  { id: "mobility", emoji: "🦽", label: "Wheelchair, walker or cane", desc: "Prioritises level paths, ramps, and clear footpaths.", prefs: ["stepFree", "clearPathways"], largeText: true },
+  { id: "vision", emoji: "👁", label: "Blind or low vision", desc: "Turns on spoken guidance, larger controls, and clearer pathways.", prefs: ["clearPathways", "betterLighting"], ttsOn: true, largeText: true, highContrast: true },
+  { id: "hearing", emoji: "🦻", label: "Deaf or hard of hearing", desc: "Keeps route alerts visible and easy to scan.", prefs: ["avoidCrowds", "betterLighting"], largeText: true },
+  { id: "sensory", emoji: "🧠", label: "Sensory calm", desc: "Avoids crowds, noise, and flashing-light hazards.", prefs: ["lowerNoise", "avoidCrowds", "avoidFlashing"], calmOn: true },
+];
+
+const BARRIER_TYPES = [
+  { id: "mobility", emoji: "🦽", label: "Mobility barrier", prefTag: "stepFree" },
+  { id: "noise", emoji: "🔊", label: "Noise hazard", prefTag: "lowerNoise" },
+  { id: "crowd", emoji: "👥", label: "Crowding", prefTag: "avoidCrowds" },
+  { id: "flashing", emoji: "⚡", label: "Flashing lights", prefTag: "avoidFlashing" },
+  { id: "lighting", emoji: "💡", label: "Poor lighting", prefTag: "betterLighting" },
+  { id: "pathway", emoji: "👁️", label: "Obstructed path", prefTag: "clearPathways" },
+  { id: "encroachment", emoji: "🛵", label: "Footpath encroachment", prefTag: "clearPathways" },
+  { id: "drain", emoji: "🕳️", label: "Open drain / manhole", prefTag: "clearPathways" },
+];
+
+const OUTLETS = [
+  { id: "tea", emoji: "🍵", outlet: "Sharma Tea Stall", offer: "1 free cup of chai", cost: 50 },
+  { id: "samosa", emoji: "🥟", outlet: "Ramesh Snacks Corner", offer: "2 free samosas", cost: 80 },
+  { id: "juice", emoji: "🥤", outlet: "Fresh Juice Cart", offer: "₹20 off any juice", cost: 60 },
+  { id: "thali", emoji: "🍛", outlet: "Annapurna Thali House", offer: "₹50 off a full thali", cost: 150 },
+  { id: "pharmacy", emoji: "💊", outlet: "Apollo Pharmacy", offer: "10% off health essentials", cost: 120 },
+  { id: "auto", emoji: "🛺", outlet: "Accessible Auto Stand", offer: "₹30 off your next ride", cost: 100 },
+];
+
+const VOICE_SAMPLES = [
+  { text: "The footpath is completely broken here, my wheelchair can't get through.", type: "mobility" },
+  { text: "It is very crowded, too many people to move through safely.", type: "crowd" },
+  { text: "There are bikes and carts parked all over the path.", type: "encroachment" },
+  { text: "There is an open drain right in the middle of the walkway.", type: "drain" },
+  { text: "It's too dark here at night, I can't see the path.", type: "lighting" },
+];
+
+const ROADMAP = [
+  ["📳", "Passive barrier detection using your phone's motion sensor while walking, wheeling or using a cane"],
+  ["🤟", "Full Indian Sign Language (ISL) avatar guide on every screen"],
+  ["🏛️", "Auto-forwarding verified reports to Sugamya Bharat and municipal grievance portals"],
+  ["🚌", "Booking accessible para-transit, low-floor buses and accessible auto-rickshaws in the same app"],
+  ["📡", "Offline-first mode — reports queue on your phone and sync by SMS once you're back in range"],
+  ["🪪", "Verified-reporter badge linked to UDID (Unique Disability ID) for trusted local reporting"],
+];
+
+/* fallback location if GPS is unavailable/denied — central Delhi */
+const FALLBACK_POS = { lat: 28.6139, lng: 77.2090 };
+
+const DEMO_DESTINATIONS = {
+  health: { lat: 28.6192, lng: 77.2144, label: "Community Health Centre" },
+  metro: { lat: 28.6177, lng: 77.2212, label: "Metro station with lift" },
+  restroom: { lat: 28.6102, lng: 77.2180, label: "Accessible public restroom" },
+};
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const state = {
+  lang: "en",
+  prefs: {},
+  activeProfile: null,
+  ttsOn: false,
+  calmOn: false,
+  largeText: false,
+  highContrast: false,
+  guidanceOn: false,
+  me: null,
+  usingFallback: false,
+  destination: null,
+  routeCoords: [],
+  routeMeta: null,
+  reports: [],
+  myReportIds: [],
+  rewardedIds: [],
+  foodPoints: 0,
+  civicPoints: 6,
+  redeemedCoupons: [],
+  announced: new Set(),
+  reportPlacementMode: false,
+  draftLatLng: null,
+  draftType: null,
+  draftPhoto: false,
+  draftPhotoData: "",
+  draftPhotoName: "",
+  draftNote: "",
+};
+
+let map, meMarker, meCircle, destMarker, routeLine, draftMarker, reportMarkers = {};
+
+/* =========================================================================
+   HELPERS
+   ========================================================================= */
+function t(key) { return (STRINGS[state.lang] && STRINGS[state.lang][key]) || STRINGS.en[key] || key; }
+
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.getAttribute("data-i18n")); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.getAttribute("data-i18n-placeholder")); });
+  document.getElementById("htmlRoot").lang = state.lang;
+}
+
+function haversine(a, b) {
+  const R = 6371000;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function speak(text, { force = false } = {}) {
+  if (!state.ttsOn && !force) return;
+  if (!("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = VOICE_LANG[state.lang] || "en-IN";
+    window.speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+let toastTimer = null;
+function toast(msg, { vibrate = false } = {}) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  speak(msg);
+  if (vibrate && navigator.vibrate) navigator.vibrate([80, 40, 80]);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 3400);
+}
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+function openModal(id) { document.getElementById(id).classList.add("open"); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove("open");
+  if (id === "modal-report") resetReportModal();
+}
+
+function confidenceOf(r) {
+  const total = r.confirms + r.denies;
+  if (total < 3) return { label: "Building", tone: "building" };
+  const ratio = r.confirms / total;
+  if (ratio >= 0.7) return { label: "High", tone: "high" };
+  if (ratio >= 0.4) return { label: "Medium", tone: "medium" };
+  return { label: "Low", tone: "low" };
+}
+function isActive(r) { const c = confidenceOf(r); return !(c.tone === "low" && r.denies > r.confirms + 2); }
+function toneColor(tone) { return tone === "high" ? "var(--low)" : tone === "medium" ? "var(--amber)" : tone === "building" ? "var(--wayfind)" : "var(--ink-soft)"; }
+function toneBg(tone) { return tone === "high" ? "var(--low-light)" : tone === "medium" ? "var(--amber-light)" : tone === "building" ? "var(--wayfind-light)" : "var(--mist)"; }
+
+/* =========================================================================
+   INIT — language pickers, preference grid, barrier grid, outlets, roadmap
+   ========================================================================= */
+function populateLangSelects() {
+  [document.getElementById("langSelectSplash"), document.getElementById("langSelectSettings")].forEach(sel => {
+    sel.innerHTML = LANGS.map(l => `<option value="${l.code}">${l.native}</option>`).join("");
+    sel.value = state.lang;
+    sel.addEventListener("change", e => { state.lang = e.target.value; applyI18n(); });
+  });
+}
+
+function renderPrefGrid() {
+  const grid = document.getElementById("prefGrid");
+  grid.innerHTML = PREFERENCES.map(p => `
+    <button class="chip" data-pref="${p.id}" data-on="${!!state.prefs[p.id]}">
+      <span style="font-size:18px;">${p.emoji}</span> ${p.label}
+    </button>`).join("");
+  grid.querySelectorAll("[data-pref]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-pref");
+      state.prefs[id] = !state.prefs[id];
+      state.activeProfile = null;
+      btn.setAttribute("data-on", String(!!state.prefs[id]));
+      renderProfileGrid();
+      evaluateRouteAgainstPrefs();
+      renderRouteCoach();
+    });
+  });
+}
+
+function renderProfileGrid() {
+  const grid = document.getElementById("profileGrid");
+  if (!grid) return;
+  grid.innerHTML = ACCESS_PROFILES.map(profile => `
+    <button class="chip" data-profile="${profile.id}" data-on="${state.activeProfile === profile.id}">
+      <b>${profile.emoji} ${profile.label}</b>
+      <span class="copy">${profile.desc}</span>
+    </button>`).join("");
+  grid.querySelectorAll("[data-profile]").forEach(btn => {
+    btn.addEventListener("click", () => applyAccessProfile(btn.getAttribute("data-profile")));
+  });
+}
+
+function applyDisplayPrefs() {
+  document.body.classList.toggle("large-text", state.largeText);
+  document.body.classList.toggle("high-contrast", state.highContrast);
+  document.body.classList.toggle("calm-mode", state.calmOn);
+  const tts = document.getElementById("switchTTS");
+  const large = document.getElementById("switchLargeText");
+  const contrast = document.getElementById("switchHighContrast");
+  const calm = document.getElementById("switchCalm");
+  if (tts) tts.setAttribute("data-on", String(state.ttsOn));
+  if (large) large.setAttribute("data-on", String(state.largeText));
+  if (contrast) contrast.setAttribute("data-on", String(state.highContrast));
+  if (calm) calm.setAttribute("data-on", String(state.calmOn));
+}
+
+function applyAccessProfile(id) {
+  const profile = ACCESS_PROFILES.find(p => p.id === id);
+  if (!profile) return;
+  state.activeProfile = id;
+  PREFERENCES.forEach(pref => { state.prefs[pref.id] = profile.prefs.includes(pref.id); });
+  state.ttsOn = !!profile.ttsOn;
+  state.largeText = !!profile.largeText;
+  state.highContrast = !!profile.highContrast;
+  state.calmOn = !!profile.calmOn;
+  renderProfileGrid();
+  renderPrefGrid();
+  applyDisplayPrefs();
+  evaluateRouteAgainstPrefs();
+  renderRouteCoach();
+  toast(`${profile.label} setup applied`);
+}
+
+function renderBarrierGrid() {
+  const grid = document.getElementById("barrierManual");
+  grid.innerHTML = BARRIER_TYPES.map(b => `
+    <button class="chip" data-barrier="${b.id}" data-on="false">
+      <span style="font-size:16px;">${b.emoji}</span> ${b.label}
+    </button>`).join("");
+  grid.querySelectorAll("[data-barrier]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      grid.querySelectorAll("[data-barrier]").forEach(b => b.setAttribute("data-on", "false"));
+      btn.setAttribute("data-on", "true");
+      state.draftType = btn.getAttribute("data-barrier");
+      updateSubmitState();
+    });
+  });
+}
+
+function renderOutlets() {
+  document.getElementById("outletsList").innerHTML = OUTLETS.map(o => `
+    <div class="outlet-row">
+      <span class="em">${o.emoji}</span>
+      <div class="info"><b>${o.outlet}</b><span>${o.offer}</span></div>
+      <button class="btn ${state.foodPoints >= o.cost ? "btn-primary" : "btn-ghost"}" data-redeem="${o.id}" style="padding:8px 14px; font-size:12px;" ${state.foodPoints >= o.cost ? "" : "disabled"}>${o.cost} pts</button>
+    </div>`).join("");
+  document.querySelectorAll("[data-redeem]").forEach(btn => {
+    btn.addEventListener("click", () => redeemCoupon(btn.getAttribute("data-redeem")));
+  });
+}
+
+function renderCoupons() {
+  const el = document.getElementById("couponsList");
+  if (state.redeemedCoupons.length === 0) {
+    el.innerHTML = `<div style="text-align:center; color:var(--ink-soft); font-size:13px; padding:20px 0;">No coupons redeemed yet — verified reports earn Food Points you can spend here.</div>`;
+    return;
+  }
+  el.innerHTML = state.redeemedCoupons.map(c => `
+    <div class="coupon-row" style="opacity:${c.used ? .5 : 1}">
+      <span style="font-size:20px;">🎫</span>
+      <div style="flex:1;">
+        <b style="display:block; font-size:13.5px;">${c.offer}</b>
+        <span style="font-size:12px; color:var(--ink-soft);">${c.outlet}</span>
+        <div class="coupon-code">${c.code}</div>
+      </div>
+      ${c.used ? `<span style="font-size:11px; color:var(--ink-soft); font-weight:700;">Used</span>` : `<button class="btn btn-ghost" data-usecoupon="${c.id}" style="padding:8px 12px; font-size:11px;">Show at counter</button>`}
+    </div>`).join("");
+  el.querySelectorAll("[data-usecoupon]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const c = state.redeemedCoupons.find(x => x.id === btn.getAttribute("data-usecoupon"));
+      if (c) { c.used = true; renderCoupons(); }
+    });
+  });
+}
+
+function renderRoadmap() {
+  document.getElementById("roadmapList").innerHTML = ROADMAP.map(([icon, text]) => `
+    <div class="roadmap-row"><span style="font-size:20px;">${icon}</span><span style="font-size:13.5px; padding-top:2px;">${text}</span></div>`).join("");
+}
+
+/* =========================================================================
+   GEOLOCATION — native SDK when wrapped as an Android app, browser API otherwise
+   ========================================================================= */
+/*
+  When this page is packaged into an Android app via Capacitor
+  (see the setup notes shared alongside this file), the native runtime
+  injects a global `Capacitor` object and `Capacitor.Plugins.Geolocation`,
+  which is backed by Android's FusedLocationProviderClient — the same
+  location SDK Google Maps itself uses — gated by the
+  ACCESS_FINE_LOCATION / ACCESS_COARSE_LOCATION permissions declared in
+  AndroidManifest.xml. In a plain browser tab there is no such manifest;
+  the browser's own permission prompt (navigator.geolocation) is the only
+  mechanism available, so this layer picks whichever is present at runtime
+  and the rest of the app never needs to know which one it's using.
+*/
+function isNativeGeoAvailable() {
+  return !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation);
+}
+
+function getCurrentPositionOnce() {
+  return new Promise((resolve, reject) => {
+    if (isNativeGeoAvailable()) {
+      window.Capacitor.Plugins.Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000 })
+        .then(pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }))
+        .catch(reject);
+    } else if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        reject,
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      reject(new Error("Geolocation not available"));
+    }
+  });
+}
+
+/* onUpdate(latlng) fires on every fix; returns a function that stops watching */
+function watchLivePosition(onUpdate) {
+  if (isNativeGeoAvailable()) {
+    let watchId;
+    window.Capacitor.Plugins.Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+      if (pos) onUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    }).then(id => { watchId = id; });
+    return () => { if (watchId) window.Capacitor.Plugins.Geolocation.clearWatch({ id: watchId }); };
+  } else if ("geolocation" in navigator) {
+    const id = navigator.geolocation.watchPosition(
+      pos => onUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 4000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }
+  return () => {};
+}
+
+function initLocation() {
+  getCurrentPositionOnce()
+    .then(pos => { state.me = pos; state.usingFallback = false; onLocationReady(); startWatching(); })
+    .catch(() => { state.me = { ...FALLBACK_POS }; state.usingFallback = true; onLocationReady(); });
+}
+
+function startWatching() {
+  watchLivePosition(pos => {
+    state.me = pos;
+    state.usingFallback = false;
+    if (meMarker) { meMarker.setLatLng([pos.lat, pos.lng]); meCircle.setLatLng([pos.lat, pos.lng]); }
+    renderRouteCoach();
+    checkProximity();
+  });
+}
+
+function onLocationReady() {
+  const label = document.getElementById("fromLabel");
+  label.textContent = state.usingFallback ? "Your location (demo — GPS unavailable)" : "Your current location";
+  renderRouteCoach();
+}
+
+/* =========================================================================
+   DESTINATION SEARCH — Nominatim geocoding + Overpass nearest amenity
+   ========================================================================= */
+let searchDebounce = null;
+function initSearch() {
+  const input = document.getElementById("destInput");
+  if (input.dataset.ready === "true") return;
+  input.dataset.ready = "true";
+  input.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    const q = input.value.trim();
+    if (q.length < 3) { document.getElementById("searchResults").innerHTML = ""; return; }
+    searchDebounce = setTimeout(() => runGeocodeSearch(q), 450);
+  });
+  document.querySelectorAll(".quick-chips [data-quick]").forEach(btn => {
+    btn.addEventListener("click", () => findNearestAmenity(btn.getAttribute("data-quick") === "hospital" ? "hospital" : "pharmacy"));
+  });
+}
+
+async function runGeocodeSearch(q) {
+  const statusEl = document.getElementById("searchStatus");
+  statusEl.style.display = "block";
+  statusEl.textContent = "Searching…";
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await res.json();
+    statusEl.style.display = "none";
+    const list = document.getElementById("searchResults");
+    if (!data.length) { list.innerHTML = `<div class="search-status" style="display:block;">No matches found — try a different search.</div>`; return; }
+    list.innerHTML = data.map((d, i) => `
+      <button data-idx="${i}"><b>${d.display_name.split(",")[0]}</b><span>${d.display_name}</span></button>`).join("");
+    list.querySelectorAll("button").forEach((btn, i) => {
+      btn.addEventListener("click", () => {
+        const d = data[i];
+        setDestination(parseFloat(d.lat), parseFloat(d.lon), d.display_name.split(",")[0]);
+      });
+    });
+  } catch (e) {
+    statusEl.textContent = "Couldn't reach live search — check your connection and try again.";
+  }
+}
+
+async function findNearestAmenity(tag) {
+  const statusEl = document.getElementById("searchStatus");
+  statusEl.style.display = "block";
+  statusEl.textContent = "Looking nearby…";
+  const origin = state.me || FALLBACK_POS;
+  const query = `[out:json][timeout:10];node(around:5000,${origin.lat},${origin.lng})["amenity"="${tag}"];out body 25;`;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9000);
+    const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await res.json();
+    statusEl.style.display = "none";
+    if (!data.elements || !data.elements.length) { toast("No results found nearby — try searching by name."); return; }
+    let best = null, bestD = Infinity;
+    data.elements.forEach(el => {
+      const d = haversine(origin, { lat: el.lat, lng: el.lon });
+      if (d < bestD) { bestD = d; best = el; }
+    });
+    const name = (best.tags && best.tags.name) || (tag === "hospital" ? "Nearest hospital" : "Nearest pharmacy");
+    setDestination(best.lat, best.lon, name);
+  } catch (e) {
+    statusEl.textContent = "Couldn't reach live map data — try searching by name instead.";
+  }
+}
+
+function setDestination(lat, lng, label) {
+  state.destination = { lat, lng, label };
+  state.guidanceOn = false;
+  state.routeCoords = [];
+  state.routeMeta = null;
+  showScreen("screen-map");
+  initMapIfNeeded();
+  document.getElementById("destNameEl").textContent = label;
+  updateGuidanceButton();
+  renderRouteCoach();
+  drawEverything();
+}
+
+/* =========================================================================
+   MAP + ROUTING
+   ========================================================================= */
+function initMapIfNeeded() {
+  if (map) return;
+  const origin = state.me || FALLBACK_POS;
+  map = L.map("leafletMap", { zoomControl: false }).setView([origin.lat, origin.lng], 15);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+
+  const meIcon = L.divIcon({ className: "", html: `<div style="width:16px;height:16px;border-radius:50%;background:#1C5D99;border:3px solid #fff;box-shadow:0 0 0 3px rgba(28,93,153,.35);"></div>`, iconSize: [16, 16] });
+  meMarker = L.marker([origin.lat, origin.lng], { icon: meIcon, zIndexOffset: 1000 }).addTo(map);
+  meCircle = L.circle([origin.lat, origin.lng], { radius: 40, color: "#1C5D99", weight: 1, fillOpacity: .08 }).addTo(map);
+
+  document.getElementById("recenterBtn").addEventListener("click", () => {
+    const p = state.me || FALLBACK_POS;
+    map.setView([p.lat, p.lng], 16);
+  });
+  map.on("click", e => {
+    if (!state.reportPlacementMode) return;
+    beginReportAt({ lat: e.latlng.lat, lng: e.latlng.lng });
+  });
+}
+
+async function drawEverything() {
+  const origin = state.me || FALLBACK_POS;
+  if (destMarker) map.removeLayer(destMarker);
+  const destIcon = L.divIcon({ className: "", html: `<div style="width:26px;height:26px;border-radius:50% 50% 50% 0; background:#C97A1A; transform:rotate(-45deg); border:2px solid #fff;"></div>`, iconSize: [26, 26], iconAnchor: [13, 26] });
+  destMarker = L.marker([state.destination.lat, state.destination.lng], { icon: destIcon }).addTo(map);
+
+  document.getElementById("routeDuration").textContent = "--";
+  document.getElementById("routeDistance").textContent = "--";
+  await fetchRoute(origin, state.destination);
+  seedReportsIfNeeded();
+  renderReportMarkers();
+  updateFaceStrip();
+  evaluateRouteAgainstPrefs();
+  renderRouteCoach();
+  fitToRoute();
+}
+
+async function fetchRoute(from, to) {
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9000);
+    const url = `https://router.project-osrm.org/route/v1/foot/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometry=geojson`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await res.json();
+    if (data.routes && data.routes[0]) {
+      const r = data.routes[0];
+      state.routeCoords = r.geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
+      state.routeMeta = { distanceM: r.distance, durationS: r.duration, estimated: false };
+    } else {
+      throw new Error("no route");
+    }
+  } catch (e) {
+    state.routeCoords = [from, to];
+    const d = haversine(from, to);
+    state.routeMeta = { distanceM: d, durationS: d / 1.1, estimated: true };
+  }
+  routeLine = L.polyline(state.routeCoords.map(c => [c.lat, c.lng]), { color: "#1C5D99", weight: 6, opacity: .9, lineCap: "round" }).addTo(map);
+  document.getElementById("routeDuration").textContent = Math.max(1, Math.round(state.routeMeta.durationS / 60));
+  document.getElementById("routeDistance").textContent = (state.routeMeta.distanceM / 1000).toFixed(1);
+  if (state.routeMeta.estimated) toast("Live routing unavailable — showing a straight-line estimate.");
+}
+
+function fitToRoute() {
+  if (!state.routeCoords.length) return;
+  const bounds = L.latLngBounds(state.routeCoords.map(c => [c.lat, c.lng]));
+  map.fitBounds(bounds, { padding: [60, 60] });
+}
+
+/* nearest distance from a point to the route polyline (vertex approximation) */
+function distanceToRoute(pt) {
+  let best = Infinity;
+  state.routeCoords.forEach(c => { const d = haversine(pt, c); if (d < best) best = d; });
+  return best;
+}
+
+function formatDistance(meters) {
+  if (!Number.isFinite(meters)) return "--";
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.max(1, Math.round(meters))} m`;
+}
+
+function routeWarnings() {
+  if (!state.routeCoords.length) return [];
+  return state.reports.filter(r => isActive(r) && distanceToRoute(r) < 90);
+}
+
+function matchingWarnings() {
+  const activePrefs = Object.keys(state.prefs).filter(k => state.prefs[k]);
+  if (!activePrefs.length) return routeWarnings();
+  return routeWarnings().filter(r => {
+    const bt = BARRIER_TYPES.find(b => b.id === r.type);
+    return bt && activePrefs.includes(bt.prefTag);
+  });
+}
+
+function renderRouteCoach() {
+  const coach = document.getElementById("mapCoach");
+  const steps = document.getElementById("routeSteps");
+  if (!coach || !steps) return;
+  if (!state.destination) {
+    coach.innerHTML = `<div class="coach-eyebrow">Live guide</div><div class="coach-main">Choose a destination to begin.</div><div class="coach-sub">Your route guidance will appear here.</div>`;
+    steps.innerHTML = "";
+    return;
+  }
+  const origin = state.me || FALLBACK_POS;
+  const directDistance = haversine(origin, state.destination);
+  const warnings = routeWarnings();
+  const matches = matchingWarnings();
+  const title = state.guidanceOn ? `Move toward ${state.destination.label}` : `Route ready for ${state.destination.label}`;
+  const issueText = matches.length
+    ? `${matches.length} access alert${matches.length > 1 ? "s" : ""} match your settings.`
+    : warnings.length
+      ? `${warnings.length} community alert${warnings.length > 1 ? "s" : ""} on this route.`
+      : "No community barriers are marked close to this route yet.";
+  coach.innerHTML = `
+    <div class="coach-eyebrow">${state.guidanceOn ? "Guidance running" : "Live guide"}</div>
+    <div class="coach-main">${title}</div>
+    <div class="coach-sub">${formatDistance(directDistance)} from here. ${issueText}</div>`;
+  steps.innerHTML = [
+    ["📍", state.usingFallback ? "Location demo mode" : "Live location ready", state.usingFallback ? "GPS is unavailable, so Delhi demo coordinates are being used." : "Your blue marker updates as your device moves."],
+    ["🧭", "Accessible route check", state.routeMeta ? `${formatDistance(state.routeMeta.distanceM)} route, about ${Math.max(1, Math.round(state.routeMeta.durationS / 60))} minutes.` : "Calculating route..."],
+    [matches.length ? "⚠️" : "✅", matches.length ? "Watch the marked barriers" : "Path looks clear so far", issueText],
+    ["🏁", "Destination", state.destination.label],
+  ].map(([icon, label, copy]) => `
+    <div class="route-step-row">
+      <span class="step-dot">${icon}</span>
+      <span><b>${label}</b>${copy}</span>
+    </div>`).join("");
+}
+
+function updateGuidanceButton() {
+  const btn = document.getElementById("btnGuidance");
+  if (!btn) return;
+  btn.textContent = state.guidanceOn ? "⏸ Pause guidance" : "▶ Start guidance";
+  btn.classList.toggle("btn-accent", state.guidanceOn);
+  btn.classList.toggle("btn-primary", !state.guidanceOn);
+}
+
+function routeSummaryText() {
+  if (!state.destination) return "Choose a destination first.";
+  const warnings = matchingWarnings();
+  const routePart = state.routeMeta
+    ? `${formatDistance(state.routeMeta.distanceM)}, about ${Math.max(1, Math.round(state.routeMeta.durationS / 60))} minutes`
+    : "route is still calculating";
+  const warningPart = warnings.length
+    ? `${warnings.length} reported access alert${warnings.length > 1 ? "s" : ""} match your settings.`
+    : "No matching barriers are marked close to this route yet.";
+  return `Route to ${state.destination.label}. ${routePart}. ${warningPart}`;
+}
+
+function readRouteSummary() {
+  const summary = routeSummaryText();
+  speak(summary, { force: true });
+  toast("Reading the route summary aloud.");
+}
+
+function toggleGuidance() {
+  if (!state.destination) return;
+  state.guidanceOn = !state.guidanceOn;
+  updateGuidanceButton();
+  renderRouteCoach();
+  if (state.guidanceOn) {
+    readRouteSummary();
+  } else {
+    toast("Guidance paused.");
+  }
+}
+
+/* =========================================================================
+   REAL-TIME SYNC (optional) — Firestore keeps reports/votes live across every
+   phone running this app, instead of each device only seeing its own local
+   simulation. Leave FIREBASE_CONFIG.apiKey as-is to run in local-only demo
+   mode (current behaviour, no account needed); paste in your own free
+   Firebase project's config to turn on live multi-device sync.
+   ========================================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+};
+let db = null;
+let syncEnabled = false;
+let syncChannel = null;
+
+function setSyncStatus(label) {
+  const el = document.getElementById("syncStatus");
+  if (el) el.textContent = label;
+}
+
+function initLocalSync() {
+  setSyncStatus("↔ Demo sync");
+  try {
+    const savedReports = localStorage.getItem("accessmapReports");
+    if (savedReports) state.reports = JSON.parse(savedReports);
+  } catch (e) {}
+  try {
+    syncChannel = new BroadcastChannel("accessmap-reports");
+    syncChannel.onmessage = event => {
+      if (event.data && event.data.type === "reports") mergeSyncedReports(event.data.reports);
+    };
+  } catch (e) {}
+  window.addEventListener("storage", event => {
+    if (event.key !== "accessmapReports" || !event.newValue) return;
+    try { mergeSyncedReports(JSON.parse(event.newValue)); } catch (e) {}
+  });
+}
+
+function mergeSyncedReports(reports) {
+  if (!Array.isArray(reports)) return;
+  const byId = new Map(state.reports.map(r => [r.id, r]));
+  reports.forEach(r => byId.set(r.id, { ...(byId.get(r.id) || {}), ...r }));
+  state.reports = Array.from(byId.values());
+  if (map) { renderReportMarkers(); updateFaceStrip(); evaluateRouteAgainstPrefs(); }
+  renderRouteCoach();
+  checkVerification();
+}
+
+function publishLocalReports() {
+  if (syncEnabled) return;
+  try {
+    const payload = JSON.stringify(state.reports);
+    localStorage.setItem("accessmapReports", payload);
+    if (syncChannel) syncChannel.postMessage({ type: "reports", reports: state.reports });
+  } catch (e) {}
+}
+
+function initSync() {
+  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === "YOUR_API_KEY") { initLocalSync(); return; }
+  if (typeof firebase === "undefined") { initLocalSync(); return; }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    syncEnabled = true;
+    setSyncStatus("↔ Live sync");
+    db.collection("reports").onSnapshot(snap => {
+      state.reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (map) { renderReportMarkers(); updateFaceStrip(); evaluateRouteAgainstPrefs(); }
+      renderRouteCoach();
+      checkVerification();
+    }, () => { setSyncStatus("↔ Sync offline"); toast("Live sync lost connection — showing the last known reports."); });
+  } catch (e) { syncEnabled = false; initLocalSync(); }
+}
+
+/* =========================================================================
+   REPORTS
+   ========================================================================= */
+function seedReportsIfNeeded() {
+  if (syncEnabled) return; /* live data comes from Firestore instead */
+  if (state.reports.length > 0) return;
+  const origin = state.me || FALLBACK_POS;
+  const off = (dLat, dLng) => ({ lat: origin.lat + dLat, lng: origin.lng + dLng });
+  state.reports.push(
+    { id: "seed-1", lat: off(0.0011, 0.0006).lat, lng: off(0.0011, 0.0006).lng, type: "mobility", confirms: 14, denies: 2, hasPhoto: true, note: "Kerb has collapsed right outside the health centre gate.", mine: false },
+    { id: "seed-2", lat: off(-0.0007, 0.0014).lat, lng: off(-0.0007, 0.0014).lng, type: "crowd", confirms: 20, denies: 3, hasPhoto: false, note: "Vegetable market spills onto the footpath every morning.", mine: false },
+    { id: "seed-3", lat: off(0.0004, -0.0012).lat, lng: off(0.0004, -0.0012).lng, type: "encroachment", confirms: 9, denies: 4, hasPhoto: true, note: "Handcarts and parked two-wheelers narrow the path.", mine: false }
+  );
+  publishLocalReports();
+}
+
+function reportIcon(r) {
+  const bt = BARRIER_TYPES.find(b => b.id === r.type);
+  const conf = confidenceOf(r);
+  const color = conf.tone === "high" ? "#B0483F" : conf.tone === "medium" ? "#C97A1A" : "#1C5D99";
+  return L.divIcon({
+    className: "", iconSize: [30, 30], iconAnchor: [15, 15],
+    html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(16,27,45,.25);">${bt.emoji}</div>`,
+  });
+}
+
+function renderReportMarkers() {
+  Object.values(reportMarkers).forEach(m => map.removeLayer(m));
+  reportMarkers = {};
+  state.reports.filter(isActive).forEach(r => {
+    const marker = L.marker([r.lat, r.lng], { icon: reportIcon(r) }).addTo(map);
+    marker.bindPopup(() => renderPopupHtml(r));
+    marker.on("popupopen", () => bindPopupActions(r.id));
+    reportMarkers[r.id] = marker;
+  });
+}
+
+function renderPopupHtml(r) {
+  const bt = BARRIER_TYPES.find(b => b.id === r.type);
+  const conf = confidenceOf(r);
+  return `
+    <div style="width:220px;">
+      <div class="lp-title">${bt.emoji} ${bt.label}</div>
+      ${r.note ? `<div class="lp-note">${r.note}</div>` : ""}
+      ${r.photoData ? `<img class="lp-photo-img" src="${r.photoData}" alt="Barrier photo evidence" />` : ""}
+      ${r.hasPhoto ? `<div class="lp-photo">📷 Photo evidence attached</div>` : ""}
+      <div class="lp-conf" style="background:${toneBg(conf.tone)}; color:${toneColor(conf.tone)};">
+        <b>Community confidence: ${conf.label}</b><br/>${r.confirms} confirmed, ${r.denies} said it's gone
+      </div>
+      <div class="lp-actions">
+        <button data-vote="confirm" style="background:var(--high-light); color:var(--high);">👍 ${t("confirm")}</button>
+        <button data-vote="deny" style="background:var(--mist); color:var(--ink-soft);">👎 ${t("goneNow")}</button>
+      </div>
+    </div>`;
+}
+
+function bindPopupActions(reportId) {
+  document.querySelectorAll(`.leaflet-popup [data-vote]`).forEach(btn => {
+    btn.onclick = () => vote(reportId, btn.getAttribute("data-vote"));
+  });
+}
+
+function vote(id, kind) {
+  state.civicPoints += 1;
+  document.getElementById("civicPointsEl").textContent = state.civicPoints;
+  map.closePopup();
+  if (syncEnabled) {
+    const field = kind === "confirm" ? "confirms" : "denies";
+    db.collection("reports").doc(id).update({ [field]: firebase.firestore.FieldValue.increment(1) })
+      .catch(() => toast("Couldn't sync your vote — check your connection."));
+    /* UI updates automatically when the Firestore listener fires */
+  } else {
+    const r = state.reports.find(x => x.id === id);
+    if (!r) return;
+    if (kind === "confirm") r.confirms++; else r.denies++;
+    renderReportMarkers();
+    updateFaceStrip();
+    renderRouteCoach();
+    checkVerification();
+    publishLocalReports();
+  }
+  toast(kind === "confirm" ? "Confirmed — thanks for verifying" : "Marked as no longer present");
+}
+
+function checkVerification() {
+  const newlyVerified = state.reports.filter(r => state.myReportIds.includes(r.id) && confidenceOf(r).tone === "high" && !state.rewardedIds.includes(r.id));
+  if (newlyVerified.length) {
+    state.rewardedIds.push(...newlyVerified.map(r => r.id));
+    state.foodPoints += 100 * newlyVerified.length;
+    document.getElementById("foodPointsEl").textContent = state.foodPoints;
+    renderOutlets();
+    openModal("modal-reward-earned");
+    toast(`Verified by the community — you earned ${100 * newlyVerified.length} Food Points`);
+  }
+}
+
+function updateFaceStrip() {
+  const strip = document.getElementById("faceStrip");
+  const nearby = state.reports.filter(r => isActive(r) && distanceToRoute(r) < 80);
+  if (!nearby.length) { strip.innerHTML = `<span style="font-size:12.5px; color:var(--ink-soft); padding:6px 0;">Nothing reported on this route yet</span>`; return; }
+  strip.innerHTML = nearby.map(r => {
+    const bt = BARRIER_TYPES.find(b => b.id === r.type);
+    const conf = confidenceOf(r);
+    return `<button class="face-chip" style="background:${toneBg(conf.tone)}; color:${toneColor(conf.tone)};" data-panto="${r.id}">${bt.emoji} ${bt.label} · ${conf.label}</button>`;
+  }).join("");
+  strip.querySelectorAll("[data-panto]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const r = state.reports.find(x => x.id === btn.getAttribute("data-panto"));
+      if (r) { map.setView([r.lat, r.lng], 17); reportMarkers[r.id] && reportMarkers[r.id].openPopup(); }
+    });
+  });
+}
+
+function evaluateRouteAgainstPrefs() {
+  const activePrefs = Object.keys(state.prefs).filter(k => state.prefs[k]);
+  const banner = document.getElementById("prefBanner");
+  if (!state.routeCoords.length || !activePrefs.length) { banner.style.display = "none"; return; }
+  const hit = state.reports.find(r => isActive(r) && confidenceOf(r).tone === "high" && distanceToRoute(r) < 80 && BARRIER_TYPES.find(b => b.id === r.type && activePrefs.includes(b.prefTag)));
+  if (hit) {
+    const bt = BARRIER_TYPES.find(b => b.id === hit.type);
+    banner.style.display = "flex";
+    banner.innerHTML = `⚠️ This route has a reported ${bt.label.toLowerCase()} matching your preferences.<button id="dismissBanner">✕</button>`;
+    document.getElementById("dismissBanner").onclick = () => { banner.style.display = "none"; };
+  } else {
+    banner.style.display = "none";
+  }
+}
+
+function checkProximity() {
+  if (!state.me || !state.routeCoords.length) return;
+  const activePrefs = Object.keys(state.prefs).filter(k => state.prefs[k]);
+  state.reports.filter(isActive).forEach(r => {
+    if (r.mine || state.announced.has(r.id)) return;
+    const bt = BARRIER_TYPES.find(b => b.id === r.type);
+    if (!activePrefs.includes(bt.prefTag)) return;
+    const d = haversine(state.me, { lat: r.lat, lng: r.lng });
+    if (d < 100) {
+      state.announced.add(r.id);
+      toast(`Reported ${bt.label.toLowerCase()} ahead`, { vibrate: true });
+    }
+  });
+}
+
+function setReportPlacementMode(on) {
+  state.reportPlacementMode = on;
+  const banner = document.getElementById("reportPlacementBanner");
+  const btn = document.getElementById("btnReport");
+  const icon = document.getElementById("reportBtnIcon");
+  const label = document.getElementById("reportBtnText");
+  if (banner) banner.style.display = on ? "flex" : "none";
+  if (btn) {
+    btn.classList.toggle("btn-accent", on);
+    btn.classList.toggle("btn-primary", !on);
+  }
+  if (icon) icon.textContent = on ? "✕" : "🚧";
+  if (label) label.textContent = on ? "Cancel mark" : "Mark barrier";
+  if (map) map.getContainer().style.cursor = on ? "crosshair" : "";
+}
+
+function startReportPlacement() {
+  if (state.reportPlacementMode) {
+    cancelReportPlacement();
+    return;
+  }
+  resetReportModal();
+  setReportPlacementMode(true);
+  toast("Tap the map where the barrier is. You can drag the marker after placing it.");
+}
+
+function cancelReportPlacement() {
+  setReportPlacementMode(false);
+  resetReportModal();
+}
+
+function setDraftMarker(latlng) {
+  if (!map) return;
+  if (draftMarker) map.removeLayer(draftMarker);
+  const icon = L.divIcon({
+    className: "",
+    iconSize: [34, 34],
+    iconAnchor: [17, 30],
+    html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0; background:#B0483F; transform:rotate(-45deg); border:3px solid #fff; box-shadow:0 4px 12px rgba(16,27,45,.28); display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;">🚧</span></div>`,
+  });
+  draftMarker = L.marker([latlng.lat, latlng.lng], { icon, draggable: true, zIndexOffset: 1200 }).addTo(map);
+  draftMarker.on("dragend", () => {
+    const p = draftMarker.getLatLng();
+    state.draftLatLng = { lat: p.lat, lng: p.lng };
+    updateDraftLocationHint();
+  });
+}
+
+function clearDraftMarker() {
+  if (draftMarker && map) map.removeLayer(draftMarker);
+  draftMarker = null;
+}
+
+function beginReportAt(latlng) {
+  state.draftLatLng = latlng;
+  setReportPlacementMode(false);
+  setDraftMarker(latlng);
+  resetReportModal({ keepLocation: true });
+  updateDraftLocationHint();
+  openModal("modal-report");
+}
+
+function updateDraftLocationHint() {
+  const el = document.getElementById("draftLocationHint");
+  if (!el) return;
+  if (!state.draftLatLng) {
+    el.textContent = "📍 Tap the map to mark the barrier location.";
+    return;
+  }
+  el.textContent = `📍 Barrier marked at ${state.draftLatLng.lat.toFixed(5)}, ${state.draftLatLng.lng.toFixed(5)}. Drag the map pin if needed.`;
+}
+
+function updateSubmitState() {
+  const btn = document.getElementById("submitReport");
+  if (btn) btn.disabled = !(state.draftType && state.draftLatLng);
+}
+
+function updatePhotoPreview() {
+  const btn = document.getElementById("photoToggle");
+  const preview = document.getElementById("photoPreview");
+  if (btn) {
+    btn.setAttribute("data-on", String(state.draftPhoto));
+    btn.style.background = state.draftPhoto ? "var(--wayfind-light)" : "";
+    btn.style.color = state.draftPhoto ? "var(--wayfind)" : "";
+    btn.textContent = state.draftPhoto ? "📷 Photo attached (+5 pts)" : "📷 Take photo";
+  }
+  if (!preview) return;
+  if (!state.draftPhoto) {
+    preview.style.display = "none";
+    preview.innerHTML = "";
+    return;
+  }
+  preview.style.display = "block";
+  preview.innerHTML = state.draftPhotoData
+    ? `<img src="${state.draftPhotoData}" alt="Barrier photo evidence preview" style="width:100%; max-height:180px; object-fit:cover; border-radius:14px; border:1px solid var(--line);" />`
+    : `<div style="font-size:12.5px; color:var(--ink-soft); background:var(--mist); border-radius:12px; padding:10px 12px;">Photo evidence attached.</div>`;
+}
+
+function compressPhotoToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => resolve(reader.result);
+      img.onload = () => {
+        const max = 720;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handlePhotoSelected(file) {
+  if (!file) return;
+  state.draftPhoto = true;
+  state.draftPhotoName = file.name || "Camera photo";
+  updatePhotoPreview();
+  try {
+    state.draftPhotoData = await compressPhotoToDataUrl(file);
+  } catch (e) {
+    state.draftPhotoData = "";
+  }
+  updatePhotoPreview();
+}
+
+/* ---- report submission ---- */
+function submitReport() {
+  if (!state.draftType || !state.draftLatLng) return;
+  const pos = state.draftLatLng;
+  const earned = state.draftPhoto ? 8 : 3;
+  const payload = {
+    lat: pos.lat,
+    lng: pos.lng,
+    type: state.draftType,
+    confirms: state.draftPhoto ? 2 : 1,
+    denies: 0,
+    hasPhoto: state.draftPhoto,
+    photoData: state.draftPhotoData || "",
+    note: state.draftNote || "",
+    mine: true,
+  };
+  state.civicPoints += earned;
+  document.getElementById("civicPointsEl").textContent = state.civicPoints;
+
+  if (syncEnabled) {
+    db.collection("reports").add(payload)
+      .then(docRef => { state.myReportIds.push(docRef.id); })
+      .catch(() => toast("Couldn't sync your report — it's saved on this device only."));
+    /* the marker appears as soon as the Firestore listener echoes it back */
+  } else {
+    const id = "r-" + Math.random().toString(36).slice(2, 8);
+    state.reports.push({ id, ...payload });
+    state.myReportIds.push(id);
+    renderReportMarkers();
+    updateFaceStrip();
+    evaluateRouteAgainstPrefs();
+    renderRouteCoach();
+    publishLocalReports();
+  }
+  closeModal("modal-report");
+  toast(`Barrier report submitted from your map marker — +${earned} Civic Points. Verified reports can still earn Food Points.`);
+}
+
+function resetReportModal({ keepLocation = false } = {}) {
+  state.draftType = null; state.draftPhoto = false; state.draftPhotoData = ""; state.draftPhotoName = ""; state.draftNote = "";
+  if (!keepLocation) { state.draftLatLng = null; clearDraftMarker(); setReportPlacementMode(false); }
+  document.querySelectorAll("#barrierManual [data-barrier]").forEach(b => b.setAttribute("data-on", "false"));
+  updateSubmitState();
+  updatePhotoPreview();
+  updateDraftLocationHint();
+  const input = document.getElementById("photoInput");
+  if (input) input.value = "";
+  document.getElementById("micResult").style.display = "none";
+  document.getElementById("micStatus").style.display = "block";
+  document.getElementById("micStatus").textContent = "Tap and describe the barrier out loud.";
+  setReportTab("manual");
+}
+
+function setReportTab(tab) {
+  document.getElementById("tabManual").setAttribute("data-on", String(tab === "manual"));
+  document.getElementById("tabVoice").setAttribute("data-on", String(tab === "voice"));
+  document.getElementById("barrierManual").style.display = tab === "manual" ? "grid" : "none";
+  document.getElementById("barrierVoice").style.display = tab === "voice" ? "block" : "none";
+}
+
+/* ---- rewards ---- */
+function redeemCoupon(outletId) {
+  const o = OUTLETS.find(x => x.id === outletId);
+  if (!o || state.foodPoints < o.cost) return;
+  state.foodPoints -= o.cost;
+  const code = "AM" + Math.random().toString(36).slice(2, 8).toUpperCase();
+  state.redeemedCoupons.push({ id: "c-" + Math.random().toString(36).slice(2, 8), outlet: o.outlet, offer: o.offer, code, used: false });
+  document.getElementById("foodPointsEl").textContent = state.foodPoints;
+  renderOutlets();
+  toast(`Redeemed — ${o.offer} at ${o.outlet}`);
+}
+
+/* =========================================================================
+   EVENT WIRING
+   ========================================================================= */
+function wireEvents() {
+  document.getElementById("btnStart").addEventListener("click", () => { showScreen("screen-destination"); initSearch(); });
+  document.getElementById("btnSetPrefs").addEventListener("click", () => openModal("modal-prefs"));
+  document.querySelectorAll("[data-profile-shortcut]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      applyAccessProfile(btn.getAttribute("data-profile-shortcut"));
+      openModal("modal-prefs");
+    });
+  });
+  document.getElementById("backToSplash").addEventListener("click", () => showScreen("screen-splash"));
+  document.getElementById("openPrefsFromDest").addEventListener("click", () => openModal("modal-prefs"));
+  document.getElementById("backFromMap").addEventListener("click", () => showScreen("screen-destination"));
+  document.getElementById("openSettingsFromMap").addEventListener("click", () => openModal("modal-prefs"));
+  document.getElementById("openRewards").addEventListener("click", () => openModal("modal-rewards"));
+  document.getElementById("viewRewardsBtn").addEventListener("click", () => { closeModal("modal-reward-earned"); openModal("modal-rewards"); });
+  document.getElementById("btnGuidance").addEventListener("click", toggleGuidance);
+  document.getElementById("btnReadRoute").addEventListener("click", readRouteSummary);
+  document.querySelectorAll("[data-demo-dest]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const dest = DEMO_DESTINATIONS[btn.getAttribute("data-demo-dest")];
+      if (dest) setDestination(dest.lat, dest.lng, dest.label);
+    });
+  });
+
+  document.querySelectorAll("[data-close]").forEach(btn => btn.addEventListener("click", () => closeModal(btn.getAttribute("data-close"))));
+  document.querySelectorAll(".overlay").forEach(ov => ov.addEventListener("click", e => { if (e.target === ov) closeModal(ov.id); }));
+
+  document.getElementById("switchTTS").addEventListener("click", function () {
+    state.ttsOn = !state.ttsOn;
+    state.activeProfile = null;
+    renderProfileGrid();
+    applyDisplayPrefs();
+  });
+  document.getElementById("switchLargeText").addEventListener("click", function () {
+    state.largeText = !state.largeText;
+    state.activeProfile = null;
+    renderProfileGrid();
+    applyDisplayPrefs();
+  });
+  document.getElementById("switchHighContrast").addEventListener("click", function () {
+    state.highContrast = !state.highContrast;
+    state.activeProfile = null;
+    renderProfileGrid();
+    applyDisplayPrefs();
+  });
+  document.getElementById("switchCalm").addEventListener("click", function () {
+    state.calmOn = !state.calmOn;
+    state.activeProfile = null;
+    renderProfileGrid();
+    applyDisplayPrefs();
+  });
+
+  document.getElementById("btnSOS").addEventListener("click", () => openModal("modal-sos"));
+  document.getElementById("shareLocationBtn").addEventListener("click", async () => {
+    const p = state.me || FALLBACK_POS;
+    const url = `https://maps.google.com/?q=${p.lat},${p.lng}`;
+    if (navigator.share) { try { await navigator.share({ title: "My live location", text: "Here's where I am right now", url }); } catch (e) {} }
+    else { try { await navigator.clipboard.writeText(url); toast("Location link copied — paste it to your contact"); } catch (e) { toast(url); } }
+  });
+
+  document.getElementById("btnReport").addEventListener("click", startReportPlacement);
+  document.getElementById("cancelPlacement").addEventListener("click", cancelReportPlacement);
+  document.getElementById("tabManual").addEventListener("click", () => setReportTab("manual"));
+  document.getElementById("tabVoice").addEventListener("click", () => setReportTab("voice"));
+  document.getElementById("photoToggle").addEventListener("click", () => document.getElementById("photoInput").click());
+  document.getElementById("photoInput").addEventListener("change", e => handlePhotoSelected(e.target.files && e.target.files[0]));
+  document.getElementById("submitReport").addEventListener("click", submitReport);
+  document.getElementById("micBtn").addEventListener("click", () => {
+    document.getElementById("micStatus").textContent = "Listening…";
+    setTimeout(() => {
+      const sample = VOICE_SAMPLES[Math.floor(Math.random() * VOICE_SAMPLES.length)];
+      state.draftType = sample.type; state.draftNote = sample.text;
+      document.getElementById("micTranscript").textContent = `"${sample.text}"`;
+      document.getElementById("micMatchedType").textContent = BARRIER_TYPES.find(b => b.id === sample.type).label;
+      document.getElementById("micResult").style.display = "block";
+      document.getElementById("micStatus").style.display = "none";
+      updateSubmitState();
+    }, 1600);
+  });
+
+  document.getElementById("tabRedeem").addEventListener("click", () => {
+    document.getElementById("tabRedeem").setAttribute("data-on", "true");
+    document.getElementById("tabCoupons").setAttribute("data-on", "false");
+    document.getElementById("outletsList").style.display = "block";
+    document.getElementById("couponsList").style.display = "none";
+  });
+  document.getElementById("tabCoupons").addEventListener("click", () => {
+    document.getElementById("tabRedeem").setAttribute("data-on", "false");
+    document.getElementById("tabCoupons").setAttribute("data-on", "true");
+    document.getElementById("outletsList").style.display = "none";
+    document.getElementById("couponsList").style.display = "block";
+    renderCoupons();
+  });
+
+  document.getElementById("modal-rewards").addEventListener("transitionend", () => {});
+  const rewardsObserver = () => { document.getElementById("rewardsBalance").textContent = `${state.foodPoints} points available`; };
+  document.getElementById("openRewards").addEventListener("click", rewardsObserver);
+  document.getElementById("btnSetPrefs").addEventListener("click", () => { renderProfileGrid(); renderPrefGrid(); applyDisplayPrefs(); });
+  document.getElementById("openPrefsFromDest").addEventListener("click", () => { renderProfileGrid(); renderPrefGrid(); applyDisplayPrefs(); });
+  document.getElementById("openSettingsFromMap").addEventListener("click", () => { renderProfileGrid(); renderPrefGrid(); applyDisplayPrefs(); });
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+function boot() {
+  populateLangSelects();
+  applyI18n();
+  renderProfileGrid();
+  renderPrefGrid();
+  applyDisplayPrefs();
+  renderBarrierGrid();
+  renderOutlets();
+  renderRoadmap();
+  wireEvents();
+  initSync();
+  initLocation();
+  renderRouteCoach();
+}
+document.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>
